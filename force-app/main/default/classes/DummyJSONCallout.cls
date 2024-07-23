@@ -33,7 +33,6 @@ public with sharing class DummyJSONCallout {
 	 * 
      * @param dummyUserId The ID of the user in the external system to fetch data for.
      */
-
 	public static void getDummyJSONUserFromId(String dummyUserId) {
 		// Create HTTP request to send.
 		Http http = new Http();
@@ -48,9 +47,11 @@ public with sharing class DummyJSONCallout {
 		if (response.getStatusCode() == 200) {
 		Contact cont = createContactFromJson(response.getBody());
 		cont.DummyJSON_Id__c = dummyUserId;
-		if (cont != null) {
+		try {
 			upsert cont DummyJSON_Id__c; //insert/update from the JSON response using the external id (dummyUserId)
-		}
+		} catch(Exception e) {
+				System.debug('Error: ' + e.getMessage());
+			}
 		
 		}
 	}
@@ -111,21 +112,30 @@ public with sharing class DummyJSONCallout {
      * 
      * @param contactId The Salesforce Contact ID used to generate the JSON payload for the external system.
      */
-	
 	public static void postCreateDummyJSONUser(String contactId) {
 		// Create HTTP request to send.
-
+		HttpRequest request = new HttpRequest();
 		// Set the endpoint URL. Use direct URL or for best practices use Named Credential.
-
+		request.setEndpoint('https://dummyjson.com/users/add');
 		// Set the HTTP method to POST.
-
+		request.setMethod('POST');
+		request.setHeader('Content-Type', 'application/json');
 		// Set the body using generateDummyJsonUserPayload method.
-
+		request.setBody(generateDummyJsonUserPayload(contactId));
 		// Send the HTTP request and get the response.
-
+		Http http = new Http();
+		HttpResponse response = http.send(request);
+		String responseBody = response.getBody();
 		// If the HTTP response code is successful, update the contact.
-	}
-
+		if (response.getStatusCode() >= 200 && response.getStatusCode() <= 299) {
+			Contact cont = [SELECT Id, DummyJSON_Last_Updated__c FROM Contact WHERE Id = :contactId LIMIT 1];
+			if (cont != null) {
+				cont.DummyJSON_Last_Updated__c = System.now();
+				update cont;
+			}
+		}
+		
+    }
 	/*
 	 * Question 4
      * Generates a JSON payload based on a Salesforce Contact's fields to be sent to an external system https://dummyjson.com/users/add for user creation or update.
@@ -144,13 +154,23 @@ public with sharing class DummyJSONCallout {
 	@TestVisible // Allows test class to see this method. Since it is private, it would not be visible otherwise.
 	private static String generateDummyJsonUserPayload(String contactId) {
 		// Query the contact to get the field values to generate the JSON payload.
-
+		List<Contact> cont = [SELECT Id, FirstName, LastName, Email, Phone FROM Contact Where Id = :contactId Limit 1];
 		// Create a map of the field values.
+		Map<String, Object> jsonMap = new Map<String, Object>();
 
 		// Serialize the map into a JSON string.
 		// Make sure to check that required contacts fields have a value. Default the value to unknown if it does not exists.
+		if (cont.size() > 0) {
+			jsonMap.put('salesforceId', cont[0].Id);
+			jsonMap.put('Id', cont[0].Id);
+			jsonMap.put('firstName', cont[0].FirstName ?? 'Unknown');
+			jsonMap.put('lastName', cont[0].LastName ?? 'Unknown');
+			jsonMap.put('email', cont[0].Email ?? 'Unknown');
+			jsonMap.put('phone', cont[0].Phone ?? 'Unknown');
+			
+		}
 		// Integration data can change over time. It is a best practice to add safeguards/validation to ensure the integration does not break.
-
-		return null;
+		String jsonPayload = JSON.serialize(jsonMap);
+		return jsonPayload;
 	}
 }
