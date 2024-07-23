@@ -1,5 +1,4 @@
 public class ContactTriggerHandler {
-    private static Boolean isExecuting = false;
 
     public static void beforeInsert(List<Contact> newContacts) {
     // When a contact is inserted
